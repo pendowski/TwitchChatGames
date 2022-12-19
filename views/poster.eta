@@ -1,0 +1,230 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Guess the movie</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet"> 
+        <style text="text/css">
+            #poster {
+                position: relative;
+                width: 780px;
+                min-height: 1170px;
+                overflow: hidden;
+            }
+
+            #poster.hidden {
+                opacity: 0;
+            }
+
+            #poster img, #poster canvas {
+                position: relative;
+                z-index: 100;
+            }
+
+            #poster h1 {
+                color: #fff;
+                font-family: Anton;
+                display: inline-block;
+                max-height: 300px;
+                overflow: hidden;
+            }
+
+            #title {
+                background: rgba(0,0,0, 0.6);
+                opacity: 0;
+                position: absolute;
+                bottom: 0;
+                margin: 0;
+                width: 100%;
+                z-index: 200;
+                text-align: center;
+                max-height: 300px;
+                padding: 8px;
+            }
+
+            #intro {
+                position: absolute;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                right: 0;
+                color: #fff;
+                font-family: Anton;
+                padding-top: 40%;
+                font-size: 32pt;
+                background: rgba(30, 0, 60, 1);
+                text-align: center;
+            }
+
+            #intro p {
+                margin: 0 32px;
+            }
+
+            #poster #title.visible {
+                opacity: 1;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="poster">
+            <div id="title"><h1></h1></div>
+        </div>
+        <script type="text/javascript" src="/close-pixelate.js"></script>
+        <script type="text/javascript">
+
+            let pixelateInterval = null
+            let clonedImage = null
+            let socket = null
+
+            function pixelateImage(finished = () => {}) {
+                let resolution = 64
+                let posterImage = document.querySelector('#poster-image')
+                let pixelization = new ClosePixelation(posterImage, [{
+                    resolution: resolution
+                }])
+
+                document.querySelector('#poster').classList.remove('hidden')
+
+                clearInterval(pixelateInterval)
+                pixelateInterval = setInterval(async () => {
+                    resolution -= 4
+
+                    if (resolution <= 1) {
+                        resolution = 1
+                        let image = document.createElement('img')
+                        await finished()
+                        return clearInterval(pixelateInterval)
+                    }
+
+                    pixelization.render([
+                        { resolution: resolution }
+                    ])
+                }, <%= it.tick_length %>)
+            }
+
+            function restart(inTime) {
+                setTimeout(() => {
+                    // window.location.reload()
+                    console.log("Restarting")
+                    main()
+                }, inTime)
+            }
+
+            async function main() {
+                let posterParent = document.querySelector('#poster')
+                for (let img of posterParent.querySelectorAll("img")) {
+                    img.remove()
+                }
+                posterParent.classList.add('hidden')
+                document.querySelector('#title').classList.remove('visible')
+                let posterImage = document.createElement("img")
+                posterImage.id = "poster-image"
+                posterParent.appendChild(posterImage)
+                let movieFetch = await fetch('/randomtoprated?min=1&max=5')
+                let movieInfo = await movieFetch.json()
+                let startBot = await fetch(`/start?title=${encodeURI(movieInfo.title)}&alt_title=${encodeURI(movieInfo.original_title)}&tmdb_id=${movieInfo.id}`)
+
+                let movieTitle = document.querySelector('#poster h1')
+                console.log(movieInfo)
+                let fontSize = 84
+                movieTitle.textContent = `${movieInfo.title} (${movieInfo.release_date.split('-')[0]})`
+                movieTitle.style.fontSize = `${fontSize}px`
+
+                while (movieTitle.clientWidth >= 780) {
+                    fontSize -= 1
+                    movieTitle.style.fontSize = `${fontSize}px`
+                    if (fontSize < 10) {
+                        break
+                    }
+                }
+
+                let autoPlay = <%= it.auto_play %>
+
+                posterImage.addEventListener('load', () => {
+                    let imageParent = posterImage.parentNode
+                    clonedImage = posterImage.cloneNode(true)
+                    pixelateImage(async () => {
+                        let startBot = await fetch('/stop')
+                        document.querySelector('#poster #title').classList.add('visible')
+                        imageParent.querySelector('canvas').remove()
+                        imageParent.appendChild(clonedImage)
+
+                        if (autoPlay) {
+                            restart(3000)
+                        }
+                    })
+                }, false)
+                posterImage.src = '/image?url=' + encodeURI(movieInfo.poster_url)
+                // pixelateImage()
+                
+
+                function setupSocket() {
+                    if (socket) { return }
+                    
+                    socket = new WebSocket("ws://127.0.0.1:<%= it.web_socket_port %>")
+                
+                    socket.addEventListener("open", (event) => {
+                        console.log("Socket opened")
+                    })
+                    socket.addEventListener("close", (event) => {
+                        console.error("close", event)
+                        setupSocket()
+                    })
+                    socket.addEventListener("error", event => {
+                        console.error("error", event)
+                        setupSocket()
+                    })
+                    socket.addEventListener("message", async (event) => {
+                        console.log("Message recieved")
+                        try {
+                            let json = JSON.parse(event.data)
+                            console.log("JSON", json)
+                            
+                            clearInterval(pixelateInterval)
+                            let posterImage = document.querySelector('#poster-image')
+                            let imageParent = posterImage.parentNode
+                            let startBot = await fetch('/stop')
+                            document.querySelector('#poster #title').classList.add('visible')
+                            imageParent.querySelector('canvas').remove()
+                            imageParent.appendChild(clonedImage)
+
+                            if (autoPlay) {
+                                restart(5000)
+                            }
+
+                        } catch (error) {
+                            console.error(error)
+                        }
+                    })
+                }
+                setupSocket()
+            }
+
+            window.addEventListener('beforeunload', async function (e) {
+                e.preventDefault();
+                e.returnValue = '';
+                await fetch('/stop')
+            });
+
+            function intro() {
+                console.log("Intro")
+                let posterParent = document.querySelector('#poster')
+                let introScreen = document.createElement('div')
+                introScreen.id = "intro"
+                introScreen.innerHTML = `<p>Guess the name of the movie <u>in chat</u> while it's being revealed</p><img src="/pixelated.gif">`
+                posterParent.appendChild(introScreen)
+
+                setTimeout(() => {
+                    introScreen.remove()
+                    main()
+                }, <%= it.intro_time %>)
+            }
+            intro()
+
+            // main()
+
+        </script>
+    </body>
+</html>

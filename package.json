@@ -1,0 +1,24 @@
+{
+  "name": "moviebot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "hello@shaw.stream",
+  "license": "ISC",
+  "dependencies": {
+    "7zip-min": "^1.4.3",
+    "@fastify/static": "^6.5.0",
+    "@fastify/view": "^7.1.1",
+    "better-sqlite3": "^7.6.2",
+    "dotenv": "^16.0.3",
+    "eta": "^1.12.3",
+    "fastify": "^4.9.2",
+    "got": "v11",
+    "remove-accents": "^0.4.3",
+    "tmi.js": "^1.8.5",
+    "ws": "^8.11.0"
+  }
+}
